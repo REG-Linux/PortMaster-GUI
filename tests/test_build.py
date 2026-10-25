@@ -159,7 +159,7 @@ def test_release_updates_version_json(tmp_path):
     for channel in ("alpha", "beta"):
         assert data[channel] == {
             "version": "2026.10.13-1234", "md5": md5,
-            "url": "https://github.com/PortsMaster/PortMaster-GUI/releases/download/2026.10.13-1234/PortMaster.zip"}
+            "url": "https://github.com/REG-Linux/PortMaster-GUI/releases/download/2026.10.13-1234/PortMaster.zip"}
 
     assert data["stable"] == old["stable"]
     assert (dist / "version").read_text().strip() == "2026.10.13-1234"

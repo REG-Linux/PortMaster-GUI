@@ -255,7 +255,7 @@ else
   if [ -f "$VERSION_JSON" ]; then
     cp "$VERSION_JSON" version.json
   else
-    curl -fL -o version.json "https://github.com/PortsMaster/PortMaster-GUI/releases/latest/download/version.json"
+    curl -fL -o version.json "https://github.com/REG-Linux/PortMaster-GUI/releases/latest/download/version.json"
   fi
 
   python3 tools/pm_version.py "$CHANNEL" "$VERSION"
