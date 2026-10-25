@@ -125,6 +125,19 @@ def test_detect_batocera(tmp_path):
         Path("/home/user/.local/share"), Path("/userdata/roms/ports"), Path("/userdata/roms/ports"))
 
 
+@pytest.mark.parametrize("environ", [
+    {"XDG_DATA_HOME": "/userdata/saves"},
+    {"XDG_DATA_HOME": "/root/.local/share"},
+    {},  ## Batocera's branch would raise KeyError
+    ])
+def test_detect_reglinux(tmp_path, environ):
+    ## Batocera's layout, told apart by REG's version file.
+    make_dirs(tmp_path, "/userdata/roms/ports", "/usr/share/reglinux")
+    (tmp_path / "usr" / "share" / "reglinux" / "system.version").write_text("26.10-dev-8d73ae5 2026/10/26 12:00\n")
+    assert detect(tmp_path, environ=environ)[:3] == (
+        Path("/userdata/saves"), Path("/userdata/roms/ports"), Path("/userdata/roms/ports"))
+
+
 def test_detect_muos_internal_card(tmp_path):
     make_dirs(tmp_path, "/opt/muos")
     assert detect(tmp_path)[:3] == (Path("/mnt/mmc/MUOS"), Path("/mnt/mmc/ports"), Path("/mnt/mmc/ROMS/Ports"))

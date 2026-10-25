@@ -118,8 +118,18 @@ elif [ -d "$R/mnt/SDCARD/Apps/PortMaster" ]; then
   OS_NAME_OVERRIDE="trimui"
   NO_FRONTEND_RESTART="Y"
 
+elif [ -d "$R/userdata/roms/ports" ] && [ -f "$R/usr/share/reglinux/system.version" ]; then
+  ## REG-Linux: Batocera's layout, but RegStation sees new ports by itself and there's
+  ## no configgen to patch. Its XDG_DATA_HOME is always /userdata/saves (port scripts
+  ## find PortMaster through it), whatever this shell was started with.
+  controlfolder="/userdata/saves"
+  directory="userdata/roms"
+  OS_NAME_OVERRIDE="REGLinux"
+  BATOCERA_LIKE="Y"
+  NO_FRONTEND_RESTART="Y"
+
 elif [ -d "$R/userdata/roms/ports" ]; then
-  ## Batocera, knulli, REG-Linux
+  ## Batocera, knulli
   controlfolder="$XDG_DATA_HOME"
   directory="userdata/roms"
   ## Only a default: knulli's os-release says OS_NAME="knulli" (and so gets knulli/control.txt).

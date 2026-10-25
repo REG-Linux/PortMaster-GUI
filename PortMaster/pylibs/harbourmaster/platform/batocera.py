@@ -2,6 +2,7 @@
 #
 # Batocera, REG-Linux and Knulli.
 
+import json
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -14,6 +15,8 @@ class PlatformBatocera(PlatformBase):
     MOVE_PM_BASH = False
     ES_NAME = "batocera-es"
     PORTMASTER_GAMELIST = True
+    ## The folder in PortMaster/ whose control.txt this CFW uses.
+    CONTROL_DIR = "batocera"
 
     BATOCERA_CONFIG_FILES = [
         "/userdata/system/knulli.conf",   # Knulli
@@ -141,7 +144,7 @@ class PlatformBatocera(PlatformBase):
         self._move_launcher()
 
         TL_DIR = self.hm.tools_dir / "PortMaster"
-        BC_DIR = TL_DIR / "batocera"
+        BC_DIR = TL_DIR / self.CONTROL_DIR
 
         # ACTIVATE THE CONTROL
         logger.debug(f'Copy {BC_DIR / "control.txt"} -> {TL_DIR / "control.txt"}')
@@ -155,7 +158,28 @@ class PlatformBatocera(PlatformBase):
 
 
 class PlatformREGLinux(PlatformBatocera):
-    ...
+    """
+    REG-Linux: Batocera's layout (/userdata/roms/ports), but RegStation is the frontend
+    and regmsgd launches games: no configgen to patch, controller mappings come in
+    SDL_GAMECONTROLLERCONFIG, and RegStation picks up new ports and gamelist.xml
+    (turned into gamelist.json by regmsgd) by itself, so there is nothing to refresh.
+    """
+    ES_NAME = None
+    CONTROL_DIR = "reglinux"
+
+    REGSTATION_SETTINGS = Path('/userdata/system/configs/regstation/rs_settings.json')
+
+    def get_invert_buttons_value(self):
+        ## RegStation only writes the settings that differ from its defaults, and
+        ## InvertButtons defaults to true.
+        try:
+            with open(str(self.REGSTATION_SETTINGS), 'r') as fh:
+                value = json.load(fh).get('bool', {}).get('InvertButtons', True)
+
+        except (OSError, ValueError, AttributeError):
+            return True
+
+        return value is True
 
 
 class PlatformKnulli(PlatformBatocera):

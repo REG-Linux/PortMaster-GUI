@@ -82,6 +82,12 @@ def fs_batocera(root):
     make(root, "/userdata/roms/ports", XDG)
 
 
+def fs_reglinux(root):
+    make(root, "/userdata/roms/ports", "/userdata/saves")
+    write(root, "/usr/share/reglinux/system.version", "26.10-dev-8d73ae5 2026/10/26 12:00\n")
+    write(root, "/etc/os-release", 'NAME=REG-Linux\nVERSION=26.10-dev\nID=unknown\n')
+
+
 def fs_muos(root):
     make(root, "/mnt/mmc/MUOS", "/mnt/mmc/ROMS/Ports")
     write_exe(root / "opt/muos/script/mux/quit.sh", 'echo "$(basename "$0") $*" >> "$FAKE_CALLS"\n')
@@ -129,6 +135,7 @@ CFWS = {
     'spruce':            fs_spruce,
     'trimui':            fs_trimui,
     'batocera':          fs_batocera,
+    'reglinux':          fs_reglinux,
     'muos':              fs_muos,
     'arkos':             fs_arkos,
     'arkos_one_card':    fs_arkos_one_card,
@@ -207,6 +214,7 @@ def portmaster_zip():
     files["PortMaster/trimui/icon.png"] = "png"
     files["PortMaster/batocera/control.txt"] = (PM_DIR / "batocera" / "control.txt").read_text()
     files["PortMaster/knulli/control.txt"] = (PM_DIR / "knulli" / "control.txt").read_text()
+    files["PortMaster/reglinux/control.txt"] = (PM_DIR / "reglinux" / "control.txt").read_text()
     files["PortMaster/batocera/shGenerator.py"] = "# batocera shGenerator, gamecontrollerdb.txt\n"
     files["PortMaster/knulli/shGenerator.py"] = "# knulli shGenerator, gamecontrollerdb.txt\n"
     return files
@@ -444,6 +452,29 @@ def test_knulli_gets_its_own_control(tmp_path, portmaster_zip):
     assert installer.path(XDG + "/PortMaster/control.txt").read_text() == "knulli control\n"
     assert installer.path("/userdata/roms/ports/PortMaster.sh").read_text() == stub()
     assert installer.calls() == ["curl http://localhost:1234/reloadgames"]
+
+
+@pytest.mark.parametrize("xdg", ["/userdata/saves", "/root/.local/share", None])
+def test_reglinux(tmp_path, portmaster_zip, xdg):
+    ## Found before Batocera: its own control.txt, no configgen to patch, nothing to
+    ## restart (RegStation sees the new PortMaster.sh by itself).
+    installer = Installer(tmp_path, "reglinux")
+    if xdg is None:
+        del installer.env['XDG_DATA_HOME']
+    else:
+        installer.env['XDG_DATA_HOME'] = xdg
+    put_zip(installer, portmaster_zip)
+    generator = write(
+        installer.root, "/usr/lib/python3.11/site-packages/configgen/generators/sh/shGenerator.py",
+        "from ..Generator import Generator\n")
+
+    assert installer.detect()['OS_NAME'] == "REGLinux"
+    installer.run()
+
+    assert installer.path("/userdata/roms/ports/PortMaster.sh").read_text() == stub()
+    assert installer.path("/userdata/saves/PortMaster/control.txt").read_text() == portmaster_zip["PortMaster/reglinux/control.txt"]
+    assert generator.read_text() == "from ..Generator import Generator\n"
+    assert installer.calls() == []
 
 
 def test_batocera_patched_generator_left_alone(tmp_path, portmaster_zip):

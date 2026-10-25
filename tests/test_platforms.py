@@ -17,7 +17,7 @@ def batocera_dirs(hm, tmp_path, monkeypatch):
     scripts_dir = tmp_path / "roms" / "ports"
     pm_dir = tools_dir / "PortMaster"
 
-    for cfw in ("batocera", "knulli"):
+    for cfw in ("batocera", "knulli", "reglinux"):
         (pm_dir / cfw).mkdir(parents=True)
         (pm_dir / cfw / "control.txt").write_text(f"# {cfw} control\n")
 
@@ -32,7 +32,7 @@ def batocera_dirs(hm, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("platform_class, cfw", [
     (PlatformBatocera, "batocera"),
-    (PlatformREGLinux, "batocera"),
+    (PlatformREGLinux, "reglinux"),
     (PlatformKnulli, "knulli"),
     ])
 def test_batocera_install_moves_launcher(hm, batocera_dirs, platform_class, cfw):
@@ -45,6 +45,35 @@ def test_batocera_install_moves_launcher(hm, batocera_dirs, platform_class, cfw)
     assert not (pm_dir / "PortMaster.sh").exists()
     assert (pm_dir / "control.txt").read_text() == f"# {cfw} control\n"
     assert (pm_dir / "tasksetter").is_file()
+
+
+@pytest.mark.parametrize("settings, expected", [
+    (None, True),                                    ## RegStation's default
+    ('{"bool": {"InvertButtons": false}}', False),
+    ('{"bool": {"InvertButtons": true}}', True),
+    ('{"bool": {"ShowHelpPrompts": false}}', True),  ## only changed settings are written
+    ('{"string": {}}', True),
+    ('[]', True),
+    ('{"bool": []}', True),
+    ('{broken', True),
+    ])
+def test_reglinux_invert_buttons(hm, tmp_path, monkeypatch, settings, expected):
+    ## RegStation's rs_settings.json, not EmulationStation's es_settings.cfg.
+    settings_file = tmp_path / "rs_settings.json"
+    if settings is not None:
+        settings_file.write_text(settings)
+
+    monkeypatch.setattr(PlatformREGLinux, "REGSTATION_SETTINGS", settings_file)
+    platform = PlatformREGLinux(hm)
+    assert platform.get_invert_buttons_value() is expected
+
+    platform.loaded()
+    assert platform.WANT_SWAP_BUTTONS is (not expected)
+
+
+def test_reglinux_no_frontend_refresh():
+    ## RegStation picks up new ports itself: no refresh marker, no reloadgames.
+    assert PlatformREGLinux.ES_NAME is None
 
 
 @pytest.mark.parametrize("old_location", ["PortMaster/PortMaster.sh", "PortMaster.sh"])

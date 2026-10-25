@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# SPDX-License-Identifier: MIT
+#
+# REG-Linux: RegStation is the frontend and regmsgd launches games. Nothing to patch:
+# regmsgd runs port scripts with /bin/bash and passes the connected controllers'
+# mappings in SDL_GAMECONTROLLERCONFIG.
+
+CUR_TTY=/dev/tty0
+
+export directory="userdata/roms"
+
+export ESUDO=""
+export ESUDOKILL="-1" # for 351Elec and EmuELEC use "-1" (numeric one) or "-k"
+
+## musl boards run PortMaster's glibc programs on REG's glibc sidecar, which its boot
+## script mounts. Mount it here too, in case it was installed after boot (no-op otherwise,
+## and on glibc boards there is no such command).
+if command -v reglinux-glibc-mount >/dev/null 2>&1; then
+  reglinux-glibc-mount >/dev/null 2>&1
+fi
+
+## RegStation's database: the user's copy, then the system's, then ours.
+if [ -f "$SDL_GAMECONTROLLERCONFIG_FILE" ]; then
+  :
+elif [ -f "/userdata/system/configs/regstation/gamecontrollerdb.txt" ]; then
+  export SDL_GAMECONTROLLERCONFIG_FILE="/userdata/system/configs/regstation/gamecontrollerdb.txt"
+elif [ -f "/usr/share/regstation/gamecontrollerdb.txt" ]; then
+  export SDL_GAMECONTROLLERCONFIG_FILE="/usr/share/regstation/gamecontrollerdb.txt"
+else
+  export SDL_GAMECONTROLLERCONFIG_FILE="$controlfolder/gamecontrollerdb.txt"
+fi
+
+SDLDBFILE="${SDL_GAMECONTROLLERCONFIG_FILE}"
+SDLDBUSERFILE="${HOME}/.config/SDL-GameControllerDB/gamecontrollerdb.txt"
+[ ! -f "${SDLDBUSERFILE}" ] && SDLDBUSERFILE="$SDL_GAMECONTROLLERCONFIG_FILE"
+
+get_controls() {
+  ANALOGSTICKS="${ANALOG_STICKS:-2}"
+  LOWRES="N"
+
+  ## regmsgd's mappings for the pads connected now, else the whole database.
+  if [ -n "$SDL_GAMECONTROLLERCONFIG" ]; then
+    sdl_controllerconfig="$SDL_GAMECONTROLLERCONFIG"
+  else
+    sdl_controllerconfig="$(< "${SDL_GAMECONTROLLERCONFIG_FILE}")"
+  fi
+}
+
+if [ -e "/lib/ld-linux-x86-64.so.2" ]; then
+  # CRUSH KILL DESTROY
+  if [ -f "$controlfolder/gptokeyb.x86_64" ]; then
+    mv "$controlfolder/gptokeyb.x86_64" "$controlfolder/gptokeyb"
+  fi
+
+  if [ -f "$controlfolder/gptokeyb2.x86_64" ]; then
+    mv "$controlfolder/gptokeyb2.x86_64" "$controlfolder/gptokeyb2"
+  fi
+
+  if [ -f "$controlfolder/xdelta3.x86_64" ]; then
+    mv "$controlfolder/xdelta3.x86_64" "$controlfolder/xdelta3"
+  fi
+fi
+
+source $controlfolder/device_info.txt
+source $controlfolder/funcs.txt
+
+export GPTOKEYB2="$ESUDO env LD_PRELOAD=$controlfolder/libinterpose.${DEVICE_ARCH}.so $controlfolder/gptokeyb2 $ESUDOKILL"
+export GPTOKEYB="$ESUDO $controlfolder/gptokeyb $ESUDOKILL"

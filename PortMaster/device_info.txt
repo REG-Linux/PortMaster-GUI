@@ -16,7 +16,7 @@ for arg in "$@"; do
     fi
 done
 
-export DEVICE_INFO_VERSION="0.2.6"
+export DEVICE_INFO_VERSION="0.2.7"
 
 # ------------------------------------------------------------------------------
 # 0. DIRECTORY SETUP
@@ -90,6 +90,9 @@ elif [ -f "/usr/share/plymouth/themes/text.plymouth" ] && grep -qiE '(darkos|ark
             ;;
     esac
     export CFW_NAME
+elif [ -f "/usr/share/reglinux/system.version" ]; then
+    ## os-release says NAME=REG-Linux: mod_REGLinux.txt and PlatformREGLinux go by this name.
+    export CFW_NAME="REGLinux"
 elif [ -f "/usr/share/knulli/knulli.version" ] || [ -f "/boot/boot/knulli.board" ] || [ -f "/boot/knulli.board" ] || [ -f "/etc/knulli.version" ] || grep -qi 'knulli' /etc/os-release /usr/lib/os-release 2>/dev/null; then
     export CFW_NAME="knulli"
 elif [ -f "/etc/retrooz_version" ]; then
@@ -301,6 +304,10 @@ elif [ "$CFW_NAME" = "knulli" ] || [ "$CFW_NAME" = "Batocera.linux" ]; then
         [ -n "$val" ] && export CFW_VERSION="$val"
     fi
     [ -z "$CFW_VERSION" ] && export CFW_VERSION="Unknown"
+elif [ "$CFW_NAME" = "REGLinux" ]; then
+    ## "26.10-dev-<build id> 2026/10/26 12:00": the release, without the build.
+    val="$(head -n1 /usr/share/reglinux/system.version 2>/dev/null | cut -d' ' -f1 | tr -d '\r')"
+    [ -n "$val" ] && export CFW_VERSION="${val%-*}"
 elif [ "$CFW_NAME" = "spruce" ]; then
     ## spruce's own version; os-release is the base system's (Miyoo/TrimUI stock, Debian on dArkMoss).
     if [ -f "/mnt/SDCARD/spruce/spruce" ]; then
@@ -328,7 +335,8 @@ if command -v getconf >/dev/null 2>&1; then
 fi
 
 if [ "$CFW_GLIBC" = "Unknown" ]; then
-    for path in /lib/libc.so.6 /lib64/libc.so.6 /usr/lib/libc.so.6 /usr/lib64/libc.so.6; do
+    ## /usr/glibc(32): REG-Linux's glibc sidecar, the glibc its musl boards run ports on.
+    for path in /lib/libc.so.6 /lib64/libc.so.6 /usr/lib/libc.so.6 /usr/lib64/libc.so.6 /usr/glibc/lib/libc.so.6 /usr/glibc32/lib/libc.so.6; do
         if [ -f "$path" ]; then
             GLIBC_VER="$("$path" 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)"
             if [ -n "$GLIBC_VER" ]; then export CFW_GLIBC="$(echo "$GLIBC_VER" | tr -d '.')" ; break; fi

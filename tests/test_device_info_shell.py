@@ -170,3 +170,58 @@ def test_name_and_version_from_os_release(shell, os_release, expected, tmp_path)
     version = text[text.index('export CFW_VERSION="Unknown"'):text.index("# 3c.")]
     script = re.sub(r'(?<=[\s"])/(etc|usr|boot|userdata|opt|var|mnt|app|storage)/', lambda m: f"{tmp_path}/{m.group(1)}/", detect + version)
     assert run_fragment(command, script + '\necho "$CFW_NAME|$CFW_VERSION"\n', tmp_path) == expected
+
+
+@pytest.mark.parametrize("shell", SHELLS, ids=["bash", "busybox"])
+@pytest.mark.parametrize("version, expected", [
+    ("26.10-dev-8d73ae5 2026/10/26 12:00", "REGLinux|26.10-dev"),
+    ("26.10-stable- 2026/10/26 12:00", "REGLinux|26.10-stable"),   ## releases have no build id
+    ])
+def test_reglinux_name_and_version(shell, version, expected, tmp_path):
+    ## os-release says NAME=REG-Linux, but mod_REGLinux.txt / PlatformREGLinux go by REGLinux.
+    command = shell_or_skip(shell)
+    (tmp_path / "usr" / "share" / "reglinux").mkdir(parents=True)
+    (tmp_path / "usr" / "share" / "reglinux" / "system.version").write_text(version + "\n")
+    (tmp_path / "etc").mkdir()
+    (tmp_path / "etc" / "os-release").write_text('NAME=REG-Linux\nVERSION=26.10-dev\nID=unknown\nVERSION_ID=26.10\n')
+
+    assert run_cfw_blocks(command, tmp_path) == expected
+
+
+def run_glibc_block(command, root):
+    ## Just the CFW_GLIBC section, its paths moved under root, and no getconf on PATH (the
+    ## host's would answer for this machine).
+    text = (PM_DIR / "device_info.txt").read_text()
+    block = text[text.index('export CFW_GLIBC="Unknown"'):text.index('export DEVICE_KERNEL_VERSION=')]
+    block = re.sub(r'(?<=\s)/(lib|lib64|usr)/', lambda m: f"{root}/{m.group(1)}/", block)
+    bin_dir = root / "fakebin"
+    bin_dir.mkdir()
+    for tool in ("grep", "head", "tr"):
+        (bin_dir / tool).symlink_to(shutil.which(tool))
+    command = [shutil.which(command[0])] + command[1:]
+    result = subprocess.run(command + ["-c", block + '\necho "$CFW_GLIBC"\n'], cwd=str(root), env={'PATH': str(bin_dir)},
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip().splitlines()[-1]
+
+
+def fake_libc(root, path, version):
+    libc = root / path.lstrip("/")
+    libc.parent.mkdir(parents=True, exist_ok=True)
+    libc.write_text(f'#!/bin/sh\necho "GNU C Library (fake) stable release version {version}."\n')
+    libc.chmod(0o755)
+
+
+@pytest.mark.parametrize("shell", SHELLS, ids=["bash", "busybox"])
+@pytest.mark.parametrize("libcs, expected", [
+    ([], "Unknown"),                                           ## musl, no sidecar (yet)
+    ([("/usr/glibc/lib/libc.so.6", "2.41")], "241"),           ## REG-Linux's glibc sidecar
+    ([("/usr/glibc32/lib/libc.so.6", "2.41")], "241"),         ## 32-bit boards: only the armhf one
+    ([("/lib/libc.so.6", "2.35"), ("/usr/glibc/lib/libc.so.6", "2.41")], "235"),  ## the system's wins
+    ])
+def test_glibc_version_from_libc(shell, libcs, expected, tmp_path):
+    command = shell_or_skip(shell)
+    for path, version in libcs:
+        fake_libc(tmp_path, path, version)
+
+    assert run_glibc_block(command, tmp_path) == expected

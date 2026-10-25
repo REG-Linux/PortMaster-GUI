@@ -91,6 +91,12 @@ def detect_paths(root="/", cwd=None, environ=None, home=None, df_output=None):
         ports_dir   = Path("/mnt/SDCARD/Data/ports")
         scripts_dir = Path("/mnt/SDCARD/Data/ports")
 
+    elif _p("/userdata/roms/ports").is_dir() and _p("/usr/share/reglinux/system.version").is_file():
+        ## REG-Linux: its XDG_DATA_HOME, always /userdata/saves (see tools/installer.sh).
+        tools_dir   = Path("/userdata/saves")
+        ports_dir   = Path("/userdata/roms/ports")
+        scripts_dir = Path("/userdata/roms/ports")
+
     elif _p("/userdata/roms/ports").is_dir():
         ## Batocera
         tools_dir   = Path(environ['XDG_DATA_HOME'])
