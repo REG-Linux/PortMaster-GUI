@@ -324,6 +324,8 @@ class PortsMixin:
         for file_item in self._iter_ports_dir():
             ## Skip these
             if file_item.name.lower() in (
+                    'gamelist.json',
+                    'gamelist.json.bak',
                     'gamelist.xml',
                     'gamelist.xml.old',
                     'harbourmaster',

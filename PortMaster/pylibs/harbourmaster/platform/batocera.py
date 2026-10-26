@@ -161,11 +161,18 @@ class PlatformREGLinux(PlatformBatocera):
     """
     REG-Linux: Batocera's layout (/userdata/roms/ports), but RegStation is the frontend
     and regmsgd launches games: no configgen to patch, controller mappings come in
-    SDL_GAMECONTROLLERCONFIG, and RegStation picks up new ports and gamelist.xml
-    (turned into gamelist.json by regmsgd) by itself, so there is nothing to refresh.
+    SDL_GAMECONTROLLERCONFIG, and RegStation picks up new ports by itself, so there
+    is nothing to refresh.
+
+    RegStation's gamelist is gamelist.json (regmsgd reads gamelist.xml only while a
+    folder has no gamelist.json, and it writes one as soon as a game is played), so
+    the entries go there, in its format.
     """
     ES_NAME = None
     CONTROL_DIR = "reglinux"
+
+    ## What gamelist_backup() writes when the gamelist is missing or empty.
+    BLANK_GAMELIST_XML = '{\n  "gameList": {\n    "entries": []\n  }\n}\n'
 
     REGSTATION_SETTINGS = Path('/userdata/system/configs/regstation/rs_settings.json')
 
@@ -180,6 +187,58 @@ class PlatformREGLinux(PlatformBatocera):
             return True
 
         return value is True
+
+    def gamelist_file(self):
+        return self.hm.ports_dir / 'gamelist.json'
+
+    def gamelist_add(self, gameinfo_file):
+        """
+        gameinfo.xml -> gamelist.json: { "gameList": { "entries": [ { "path", "type",
+        "metadata": { key: string } } ] } }. Only the keys PortMaster knows are set;
+        everything else (play counts, user edits, other entries) is kept.
+        """
+        if not gameinfo_file.is_file():
+            return
+
+        with self.gamelist_backup() as gamelist_json:
+            if gamelist_json is None:
+                return
+
+            with open(gamelist_json, 'r', encoding='utf-8') as fh:
+                data = json.load(fh)
+
+            game_list = data.setdefault('gameList', {})
+            if 'entries' not in game_list:
+                ## RegStation also reads "games", but writes "entries"
+                game_list['entries'] = game_list.pop('games', [])
+            entries = game_list['entries']
+
+            gameinfo_root = ET.parse(str(gameinfo_file)).getroot()
+            for game in gameinfo_root.findall('game'):
+                path = game.findtext('path')
+                if not path:
+                    continue
+
+                entry = next((e for e in entries if isinstance(e, dict) and e.get('path') == path), None)
+                if entry is None:
+                    entry = {'path': path, 'type': 'game'}
+                    entries.append(entry)
+
+                logger.info(f'{path}: ')
+
+                metadata = entry.setdefault('metadata', {})
+                for child in game:
+                    key = self.XML_ELEMENT_MAP.get(child.tag)
+                    if key is None or key == 'path' or child.text is None:
+                        continue
+
+                    metadata[key] = child.text
+
+                entry['metadata'] = dict(sorted(metadata.items()))
+
+            with open(gamelist_json, 'w', encoding='utf-8') as fh:
+                json.dump(data, fh, indent=2, ensure_ascii=False)
+                fh.write('\n')
 
 
 class PlatformKnulli(PlatformBatocera):

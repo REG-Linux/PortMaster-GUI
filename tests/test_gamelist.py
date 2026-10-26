@@ -329,3 +329,85 @@ def test_post_install_moves_launcher_then_adds_entry(hm, pm_files, monkeypatch, 
 
     assert seen == [True]
     assert "./PortMaster.sh" in games(ports_gamelist(hm))
+
+
+## -- REG-Linux: RegStation's gamelist.json
+
+from harbourmaster.platform.batocera import PlatformREGLinux  # noqa: E402
+import json  # noqa: E402
+
+
+def reg_gamelist(hm):
+    return hm.ports_dir / "gamelist.json"
+
+
+def reg_entries(hm):
+    return {entry['path']: entry for entry in json.loads(reg_gamelist(hm).read_text())['gameList']['entries']}
+
+
+def test_reglinux_gameinfo_to_gamelist_json(hm, gameinfo):
+    PlatformREGLinux(hm).gamelist_add(gameinfo)
+
+    assert not (hm.ports_dir / "gamelist.xml").exists()
+    entry = reg_entries(hm)["./Test Port.sh"]
+    assert entry['type'] == "game"
+    ## Strings, keys sorted, unknown tags dropped, paths relative to the ports dir.
+    assert list(entry['metadata'].items()) == [
+        ('desc', "A test."), ('genre', "Puzzle"), ('image', "./testport/screenshot.png"), ('name', "Test Port")]
+
+
+def test_reglinux_gamelist_json_keeps_the_rest(hm, gameinfo):
+    ## RegStation's own fields, other games and unknown keys survive an update.
+    reg_gamelist(hm).write_text(json.dumps({"gameList": {
+        "entries": [
+            {"path": "./Test Port.sh", "type": "game",
+             "metadata": {"name": "Old name", "playcount": "3", "favorite": "true"},
+             "scrap": [{"name": "ScreenScraper", "date": "20260918T101500"}]},
+            {"path": "./Other.sh", "type": "game", "metadata": {"name": "Other"}}],
+        "parentHash": 123}}))
+
+    PlatformREGLinux(hm).gamelist_add(gameinfo)
+
+    data = json.loads(reg_gamelist(hm).read_text())
+    assert data['gameList']['parentHash'] == 123
+    entries = reg_entries(hm)
+    assert sorted(entries) == ["./Other.sh", "./Test Port.sh"]
+    entry = entries["./Test Port.sh"]
+    assert entry['metadata']['name'] == "Test Port"
+    assert entry['metadata']['playcount'] == "3"
+    assert entry['metadata']['favorite'] == "true"
+    assert entry['scrap'][0]['name'] == "ScreenScraper"
+    assert list(entry['metadata']) == sorted(entry['metadata'])
+
+
+def test_reglinux_gamelist_json_legacy_games_key(hm, gameinfo):
+    reg_gamelist(hm).write_text('{"gameList": {"games": [{"path": "./Other.sh", "type": "game"}]}}')
+
+    PlatformREGLinux(hm).gamelist_add(gameinfo)
+
+    game_list = json.loads(reg_gamelist(hm).read_text())['gameList']
+    assert 'games' not in game_list
+    assert sorted(entry['path'] for entry in game_list['entries']) == ["./Other.sh", "./Test Port.sh"]
+
+
+@pytest.mark.parametrize("content", ["", "{broken"])
+def test_reglinux_gamelist_json_broken(hm, gameinfo, content, log_errors):
+    ## Empty: started over; unparseable: left alone (restored), the install goes on.
+    reg_gamelist(hm).write_text(content)
+
+    PlatformREGLinux(hm).gamelist_add(gameinfo)
+
+    if content == "":
+        assert "./Test Port.sh" in reg_entries(hm)
+    else:
+        assert reg_gamelist(hm).read_text() == content
+        assert log_errors
+
+
+def test_reglinux_portmaster_entry(hm, pm_files):
+    PlatformREGLinux(hm).gamelist_add_portmaster()
+
+    entry = reg_entries(hm)["./PortMaster.sh"]
+    assert entry['metadata']['name'] == "PortMaster"
+    ## PortMaster isn't in the ports dir: the image is a full path, which RegStation takes.
+    assert entry['metadata']['image'] == str(pm_files / "screenshot.png")
