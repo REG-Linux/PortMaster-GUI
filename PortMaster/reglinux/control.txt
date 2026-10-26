@@ -62,6 +62,17 @@ if [ -e "/lib/ld-linux-x86-64.so.2" ]; then
   fi
 fi
 
+## ARMv7 boards: gptokeyb & co ship as aarch64 binaries, with the armhf ones beside them.
+case "$(uname -m)" in
+  armv7*|armv8l)
+    for bin in gptokeyb gptokeyb2 xdelta3; do
+      if [ -f "$controlfolder/$bin.armhf" ]; then
+        mv "$controlfolder/$bin.armhf" "$controlfolder/$bin"
+      fi
+    done
+    ;;
+esac
+
 source $controlfolder/device_info.txt
 source $controlfolder/funcs.txt
 
