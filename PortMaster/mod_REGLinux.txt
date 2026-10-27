@@ -25,6 +25,21 @@ pm_platform_helper() {
         PortMasterDialogExit
     fi
 
-    # DO SOMETHING HERE
-    printf ""
+    # REG exports SDL_VIDEO_DRIVER (SDL3's name) on bare KMS/DRM, and SDL3 only
+    # falls back to SDL2's SDL_VIDEODRIVER when it is unset: a port's own
+    # SDL_VIDEODRIVER (Dusklight's SDL3 shim: "sdl2") would be ignored.
+    if [ -n "$SDL_VIDEODRIVER" ]; then
+        export SDL_VIDEO_DRIVER="$SDL_VIDEODRIVER"
+    fi
+
+    # On bare KMS/DRM only one program can be DRM master: a port's loading
+    # splash (tools/splash, started in the background just before) makes the
+    # game's SDL2 skip the device ("kmsdrm not available"). Stop it first.
+    if [ "$XDG_SESSION_TYPE" = "drm" ] && pkill -x splash 2>/dev/null; then
+        i=0
+        while pgrep -x splash >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+            sleep 0.1
+            i=$((i + 1))
+        done
+    fi
 }
