@@ -18,6 +18,12 @@ GODOT2_OPTS="-r ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
 # Use for Godot 3+
 GODOT_OPTS="--resolution ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT} -f"
 
+# Godot 3's GLES3 renderer shows nothing with Zink on the PowerVR Vulkan driver
+# (A133 GE8300): use its GLES2 renderer there.
+if [ "$GPU_DRIVER" = "powervr" ]; then
+    GODOT_OPTS="$GODOT_OPTS --video-driver GLES2"
+fi
+
 pm_platform_helper() {
     pm_message_close
 
