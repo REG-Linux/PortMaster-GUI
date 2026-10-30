@@ -58,9 +58,18 @@ class PortMasterGUI(CallbackMixin, CommandsMixin, FifoControlMixin, PortInfoMixi
         self.headless = os.environ.get('PM_HEADLESS', '') == 'Y'
 
         # Initialize SDL
-        sdl2.ext.init(
-            video=not self.headless,
-            controller=not self.headless)
+        try:
+            sdl2.ext.init(
+                video=not self.headless,
+                controller=not self.headless)
+
+        except sdl2.ext.SDLError:
+            ## On bare KMS/DRM only one program can be DRM master: the splash still
+            ## holds the screen ("kmsdrm not available"). Stop it and try again.
+            if self.headless or not self.stop_splash():
+                raise
+
+            sdl2.ext.init(video=True, controller=True)
 
         def nice_version(v):
             return f"{v.major}.{v.minor}.{v.patch}"
@@ -146,22 +155,7 @@ class PortMasterGUI(CallbackMixin, CommandsMixin, FifoControlMixin, PortInfoMixi
         else:
             window_flags = sdl2.SDL_WINDOW_FULLSCREEN
 
-            touch_file = harbourmaster.HM_TOOLS_DIR / "PortMaster" / "utils" / "pmsplash" / "stopsplash"
-
-            if touch_file.parent.is_dir():
-                touch_file.touch()
-
-            for i in range(10):
-                if not is_process_running(f"love.{capabilities['primary_arch']}"):
-                    break
-
-                sdl2.SDL_Delay(500)
-
-            if is_process_running(f"love.{capabilities['primary_arch']}"):
-                subprocess.check_output(["pkill", "-f", f"love.{capabilities['primary_arch']}"])
-
-                if touch_file.is_file():
-                    touch_file.unlink()
+            self.stop_splash()
 
 
         if self.headless:
@@ -276,6 +270,36 @@ class PortMasterGUI(CallbackMixin, CommandsMixin, FifoControlMixin, PortInfoMixi
         self.port_size_active_port = None
         self.port_size_files = {}
         self.port_size_file_lookup = {}
+
+    def stop_splash(self):
+        """
+        Ask the PortMaster splash to quit, kill it if it is still there after 5 seconds.
+
+        Returns True if it was running.
+        """
+        love = f"love.{harbourmaster.device_info()['primary_arch']}"
+
+        if not is_process_running(love):
+            return False
+
+        touch_file = harbourmaster.HM_TOOLS_DIR / "PortMaster" / "utils" / "pmsplash" / "stopsplash"
+
+        if touch_file.parent.is_dir():
+            touch_file.touch()
+
+        for i in range(10):
+            if not is_process_running(love):
+                break
+
+            sdl2.SDL_Delay(500)
+
+        if is_process_running(love):
+            subprocess.check_output(["pkill", "-f", love])
+
+            if touch_file.is_file():
+                touch_file.unlink()
+
+        return True
 
     # def init_theme(self):
     #     ## This has to run before harbourmaster is initialised, so we gotta work it out ourself.
