@@ -51,7 +51,8 @@ for VAR in $SAVE_SDL_VARS; do
   fi
 done
 
-echo "$SAVE_CLEAN_ENV" > ~/pm_dialog.txt
+# a scratch file nothing reads back: /tmp, not $HOME
+echo "$SAVE_CLEAN_ENV" > /tmp/pm_dialog.txt
 
 PortMasterIPCheck() {
   if command -v curl >/dev/null 2>&1; then

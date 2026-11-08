@@ -560,4 +560,4 @@ def test_trimui(tmp_path, portmaster_zip):
 ## The makeself header around it.
 def test_header_logs_once():
     header = (REPO_DIR / "tools" / "makeself-header.sh").read_text()
-    assert header.count('tee -a "\\$HOME/portmaster.log"') == 1
+    assert header.count('tee -a "\\$PM_LOG_DIR/portmaster.log"') == 1

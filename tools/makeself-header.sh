@@ -4,7 +4,10 @@ cat << EOF  > "$archname"
 # The license covering this archive and its contents, if any, is wholly independent of the Makeself license (GPL)
 # PORTMASTER: restore.portmaster.zip, Restore PortMaster.sh
 
-exec > >(tee -a "\$HOME/portmaster.log") 2>&1
+# REG-Linux keeps its logs in /userdata/system/logs, not loose in \$HOME
+PM_LOG_DIR="\$HOME"
+[ -d /userdata/system/logs ] && PM_LOG_DIR=/userdata/system/logs
+exec > >(tee -a "\$PM_LOG_DIR/portmaster.log") 2>&1
 
 ORIG_UMASK=\`umask\`
 if test "$KEEP_UMASK" = n; then
