@@ -44,6 +44,55 @@ if [ "${0##*/}" = "westonwrap.sh" ] && [ "$XDG_SESSION_TYPE" = "drm" ] &&
     straceseat="env -u LD_PRELOAD"
 fi
 
+# Weston ports under sway (XDG_SESSION_TYPE=wayland). Weston's DRM backend
+# cannot take the display from sway (no DRM master, no VT), so:
+#  - drm backend: Weston runs as a fullscreen sway client (its Wayland
+#    backend). The port keeps Weston's kiosk shell and its XWayland, so X11
+#    ports also work on images without XWayland.
+#  - headless backend (crusty): Weston only hosts XWayland; crusty's SDL
+#    window goes to sway instead of the invisible headless Weston.
+# westonwrap moves XDG_RUNTIME_DIR to its own dir, so sway's socket and the
+# Pulse socket are given by path. Weston, its XWayland and crusty need Mesa's
+# libwayland-client (the pack's is older than the one Mesa's libEGL was built
+# with) and libGLESv2. The pack's wayland-backend.so links libmali.so.1 (it
+# was built for ROCKNIX's Mali blob, which REG never ships): that name points
+# at Mesa's libEGL. westonwrap's libEGL probe for crusty fails on the same
+# libwayland clash, so crusty is given Mesa's libEGL directly.
+if [ "${0##*/}" = "westonwrap.sh" ] && [ "$XDG_SESSION_TYPE" = "wayland" ] &&
+   { [ "$1" = "drm" ] || [ "$1" = "headless" ]; }; then
+    reg_gllib=/usr/lib
+    [ -d /usr/glibc/lib ] && reg_gllib=/usr/glibc/lib
+    case "$WAYLAND_DISPLAY" in
+        /*) reg_host_wl=$WAYLAND_DISPLAY ;;
+        *)  reg_host_wl=$XDG_RUNTIME_DIR/${WAYLAND_DISPLAY:-wayland-1} ;;
+    esac
+    export WAYLAND_DISPLAY=$reg_host_wl
+    export PULSE_RUNTIME_PATH=${PULSE_RUNTIME_PATH:-$XDG_RUNTIME_DIR/pulse}
+    if [ "$1" = "drm" ]; then
+        set -- wayland "${@:2}"
+    else
+        eval "reg_westonwrap_$(declare -f run_user_command)"
+        run_user_command() {
+            waydisp=$reg_host_wl
+            export LD_PRELOAD=$reg_gllib/libwayland-client.so.0${LD_PRELOAD:+:$LD_PRELOAD}
+            reg_westonwrap_run_user_command
+        }
+    fi
+    [ -n "$CRUSTY_LIBEGL" ] || export CRUSTY_LIBEGL=$reg_gllib/libEGL.so.1
+    # crusty asks for GLES 3.2: Mesa gives Panfrost and V3D 3.1, Lima and VC4 2.0
+    if [ -z "$CRUSTY_GLES" ]; then
+        case "$GPU_DRIVER" in
+            panfrost|v3d) export CRUSTY_GLES=31 ;;
+            lima|vc4)     export CRUSTY_GLES=20 ;;
+        esac
+    fi
+    mkdir -p /tmp/reg-weston-egl && ln -sf "$reg_gllib/libEGL.so.1" /tmp/reg-weston-egl/libmali.so.1
+    strace="env -u LD_PRELOAD"
+    strace="$strace LD_PRELOAD=$reg_gllib/libwayland-client.so.0:$reg_gllib/libwayland-egl.so.1:$reg_gllib/libEGL.so.1:$reg_gllib/libGLESv2.so.2"
+    strace="$strace LD_LIBRARY_PATH=$(dirname "$0")/lib_aarch64:/tmp/reg-weston-egl"
+    straceseat="env -u LD_PRELOAD"
+fi
+
 pm_platform_helper() {
     pm_message_close
 
